@@ -1,0 +1,41 @@
+{
+  "name": "claude-context-bar",
+  "version": "1.0.0",
+  "description": "A coloured context-window progress bar (green → yellow → red) and plan usage % for the Claude Code status line.",
+  "author": "ibrahim",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brahimfilali758/claude-context-bar.git"
+  },
+  "homepage": "https://github.com/brahimfilali758/claude-context-bar#readme",
+  "bugs": {
+    "url": "https://github.com/brahimfilali758/claude-context-bar/issues"
+  },
+  "bin": {
+    "claude-context-bar": "cli.js"
+  },
+  "main": "statusline.js",
+  "files": [
+    "cli.js",
+    "statusline.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/",
+    "preview": "node cli.js preview"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "statusline",
+    "status-line",
+    "context-window",
+    "cli",
+    "terminal"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
