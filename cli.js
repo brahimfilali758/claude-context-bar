@@ -89,6 +89,7 @@ function preview(levels = [0, 10, 25, 40, 50, 60, 75, 90, 100]) {
   try { cfg = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (_) {}
   const { DEFAULTS } = require('./statusline.js');
   cfg = { ...DEFAULTS, ...cfg };
+  if (process.env.NO_COLOR) cfg.color = "none";
   const now = Math.floor(Date.now() / 1000);
   for (const pct of levels) {
     const size = 200000;
@@ -97,7 +98,7 @@ function preview(levels = [0, 10, 25, 40, 50, 60, 75, 90, 100]) {
       context_window: { used_percentage: pct, context_window_size: size, current_usage: null },
       rate_limits: {
         five_hour: { used_percentage: Math.min(100, pct * 0.8), resets_at: now + 8040 },
-        seven_day: { used_percentage: Math.min(100, pct * 0.5), resets_at: now + 400000 },
+        seven_day: { used_percentage: Math.min(100, pct * 0.3), resets_at: now + 400000 },
       },
     }, cfg));
   }

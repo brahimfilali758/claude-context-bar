@@ -1,6 +1,6 @@
 {
   "name": "claude-context-bar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A coloured context-window progress bar (green → yellow → red) and plan usage % for the Claude Code status line.",
   "author": "ibrahim",
   "repository": {

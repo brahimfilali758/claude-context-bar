@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { render, heat, contextInfo, fmtTokens, fmtDuration, DEFAULTS } = require('../statusline.js');
+const { render, heat, contextInfo, fmtTokens, fmtDuration, secondsUntilLimit, DEFAULTS } = require('../statusline.js');
 
 const plain = { ...DEFAULTS, color: 'none' };
 const SCRIPT = path.join(__dirname, '..', 'statusline.js');
@@ -59,4 +59,39 @@ test('script reads stdin and survives garbage input', () => {
   assert.match(ok.stdout.toString(), /77%/);
   const bad = spawnSync(process.execPath, [SCRIPT], { input: 'not json' });
   assert.strictEqual(bad.status, 0);
+});
+
+test('compact warning appears at the threshold and can be disabled', () => {
+  const at = (pct, extra = {}) => render({ context_window: { used_percentage: pct } }, { ...plain, ...extra });
+  assert.doesNotMatch(at(79), /compact/);
+  assert.match(at(80), /⚠ \/compact soon/);
+  assert.doesNotMatch(at(95, { compactWarnAt: 0 }), /compact/);
+});
+
+test('compact marker sits in the empty part of the bar', () => {
+  const out = render({ context_window: { used_percentage: 10 } }, { ...plain, chars: 'ascii', width: 10 });
+  assert.match(out, /ctx #-------\|-/);
+  const off = render({ context_window: { used_percentage: 10 } }, { ...plain, chars: 'ascii', width: 10, showCompactMarker: false });
+  assert.match(off, /ctx #---------/);
+});
+
+test('pace: warns only when the limit will be hit before reset', () => {
+  const now = 1_000_000;
+  const W = 5 * 3600;
+  // 2.5h in, 80% used → 100% in ~37m, reset in 2h30m → warn
+  assert.ok(Math.abs(secondsUntilLimit({ used_percentage: 80, resets_at: now + W / 2 }, W, now) - 2250) < 1);
+  // 2.5h in, 40% used → on track to finish at 80% → no warning
+  assert.strictEqual(secondsUntilLimit({ used_percentage: 40, resets_at: now + W / 2 }, W, now), null);
+  // too early to judge
+  assert.strictEqual(secondsUntilLimit({ used_percentage: 50, resets_at: now + W - 300 }, W, now), null);
+  // already maxed
+  assert.strictEqual(secondsUntilLimit({ used_percentage: 100, resets_at: now + 3600 }, W, now), 0);
+});
+
+test('pace warning is rendered', () => {
+  const now = Date.now() / 1000;
+  const out = render({ context_window: { used_percentage: 10 }, rate_limits: { five_hour: { used_percentage: 80, resets_at: now + 9000 } } }, plain);
+  assert.match(out, /⚠ limit in ~3[67]m/);
+  const off = render({ context_window: { used_percentage: 10 }, rate_limits: { five_hour: { used_percentage: 80, resets_at: now + 9000 } } }, { ...plain, showPace: false });
+  assert.doesNotMatch(off, /limit in/);
 });

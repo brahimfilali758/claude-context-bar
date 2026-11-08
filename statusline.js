@@ -27,8 +27,13 @@ const DEFAULTS = {
   showRateLimits: true, // 5h / 7d plan usage
   showResetTime: true,  // "(resets in 2h14m)" until the 5h window resets
   showCost: false,      // session cost in USD
+  compactWarnAt: 80,    // show "⚠ /compact soon" from this context % (0 = off)
+  showCompactMarker: true, // tick mark on the bar at compactWarnAt
+  showPace: true,       // warn when, at the current pace, you'll hit a plan limit before it resets
   separator: ' │ ',
 };
+
+const WINDOW_SECONDS = { five_hour: 5 * 3600, seven_day: 7 * 86400 };
 
 function loadConfig() {
   const cfg = { ...DEFAULTS };
@@ -97,9 +102,9 @@ const dim = (text, mode) => (mode === 'none' ? text : DIM + text + RESET);
 // ------------------------------------------------------------------- bar ---
 
 const CHARSETS = {
-  blocks: { full: '█', empty: '░', partial: ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'] },
-  shades: { full: '█', empty: '·', partial: ['', '░', '░', '▒', '▒', '▓', '▓', '▓'] },
-  ascii:  { full: '#', empty: '-', partial: ['', '', '', '', '=', '=', '=', '='] },
+  blocks: { full: '█', empty: '░', marker: '│', partial: ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'] },
+  shades: { full: '█', empty: '·', marker: '│', partial: ['', '░', '░', '▒', '▒', '▓', '▓', '▓'] },
+  ascii:  { full: '#', empty: '-', marker: '|', partial: ['', '', '', '', '=', '=', '=', '='] },
 };
 
 function renderBar(pct, cfg, mode) {
@@ -109,6 +114,9 @@ function renderBar(pct, cfg, mode) {
   const full = Math.floor(exact);
   const partialIdx = Math.floor((exact - full) * 8);
   const overall = heat(pct / 100);
+  const warnAt = num(cfg.compactWarnAt);
+  const markerIdx = cfg.showCompactMarker && warnAt > 0 && warnAt < 100
+    ? Math.min(width - 1, Math.floor((warnAt / 100) * width)) : -1;
 
   let out = '';
   for (let i = 0; i < width; i++) {
@@ -117,6 +125,8 @@ function renderBar(pct, cfg, mode) {
       out += paint(cs.full, cellColor, mode);
     } else if (i === full && partialIdx > 0 && cs.partial[partialIdx]) {
       out += paint(cs.partial[partialIdx], cellColor, mode);
+    } else if (i === markerIdx) {
+      out += paint(cs.marker, heat(warnAt / 100), mode);
     } else {
       out += paint(cs.empty, EMPTY, mode);
     }
@@ -144,6 +154,23 @@ function fmtDuration(seconds) {
 }
 
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+
+/**
+ * Linear projection: at the rate used so far in this window, how many seconds
+ * until the limit is hit? Returns null when we'd make it to the reset, or when
+ * there's too little data to judge (first 10 minutes / under 5% used).
+ */
+function secondsUntilLimit(w, windowSeconds, now) {
+  const used = num(w.used_percentage);
+  const resetsAt = num(w.resets_at);
+  if (used == null || resetsAt == null || !windowSeconds) return null;
+  const remaining = resetsAt - now;
+  const elapsed = windowSeconds - remaining;
+  if (remaining <= 0 || elapsed < 600 || used < 5) return null;
+  if (used >= 100) return 0;
+  const eta = ((100 - used) / used) * elapsed;
+  return eta < remaining ? eta : null;
+}
 
 /** Context usage, falling back to computing it ourselves if Claude Code didn't. */
 function contextInfo(data) {
@@ -178,6 +205,9 @@ function render(data, cfg) {
   let ctxPart = dim('ctx ', mode) + renderBar(ctx.pct, cfg, mode) + ' ' +
     paint(`${Math.round(ctx.pct)}%`, heat(ctx.pct / 100), mode);
   if (cfg.showTokens) ctxPart += ' ' + dim(`${fmtTokens(ctx.used)}/${fmtTokens(ctx.size)}`, mode);
+  if (num(cfg.compactWarnAt) > 0 && ctx.pct >= cfg.compactWarnAt) {
+    ctxPart += ' ' + paint('⚠ /compact soon', heat(ctx.pct / 100), mode);
+  }
   parts.push(ctxPart);
 
   const rl = data.rate_limits;
@@ -190,6 +220,10 @@ function render(data, cfg) {
       let s = dim(label + ' ', mode) + paint(`${Math.round(w.used_percentage)}%`, heat(w.used_percentage / 100), mode);
       if (cfg.showResetTime && key === 'five_hour' && num(w.resets_at) != null) {
         s += dim(` (resets in ${fmtDuration(w.resets_at - now)})`, mode);
+      }
+      if (cfg.showPace) {
+        const eta = secondsUntilLimit(w, WINDOW_SECONDS[key], now);
+        if (eta != null) s += ' ' + paint(`⚠ limit in ~${fmtDuration(eta)}`, RED, mode);
       }
       windows.push(s);
     }
@@ -222,4 +256,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { render, renderBar, heat, contextInfo, fmtTokens, fmtDuration, DEFAULTS };
+module.exports = { render, renderBar, heat, contextInfo, fmtTokens, fmtDuration, secondsUntilLimit, DEFAULTS };

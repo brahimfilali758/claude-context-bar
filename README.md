@@ -3,10 +3,14 @@
 A coloured **context-window progress bar** for the [Claude Code](https://claude.com/claude-code) status line, plus your **plan usage %** (5-hour and 7-day limits) right next to it.
 
 ```
-Opus │ ctx ██████████░░░░░░░░░░ 50% 100k/200k │ usage 5h 40% (resets in 2h13m) · 7d 25%
+Opus │ ctx ██████████░░░░░│░░░░ 50% 100k/200k │ usage 5h 40% (resets in 2h13m) · 7d 25%
+Opus │ ctx █████████████████▌░░ 88% 176k/200k ⚠ /compact soon │ usage 5h 70% (resets in 2h13m) ⚠ limit in ~1h10m · 7d 44%
 ```
 
 The bar fills **green → yellow → red** as the context window fills up, so you can see when it's time to `/compact` or start a new session.
+
+- **Compact warning:** a `│` tick on the bar marks your warning threshold (80% by default). Once you cross it, `⚠ /compact soon` appears.
+- **Pace warning:** if you're using your 5-hour or 7-day plan limit fast enough to run out before it resets, you get `⚠ limit in ~1h10m`. It's a straight-line projection from your usage so far in the window. It stays quiet for the first 10 minutes and below 5% used.
 
 - No dependencies: one small Node script
 - Works on macOS, Linux and Windows (Git Bash or PowerShell)
@@ -83,6 +87,9 @@ Edit `~/.claude/context-bar.json`. Changes apply on the next refresh.
 | `showRateLimits` | `true` | Show 5h / 7d plan usage (only appears when Claude Code provides it) |
 | `showResetTime` | `true` | Show time until the 5-hour window resets (`resets in 2h13m`) |
 | `showCost` | `false` | Show session cost in USD |
+| `compactWarnAt` | `80` | Context % at which `⚠ /compact soon` appears (`0` disables it) |
+| `showCompactMarker` | `true` | Draw a `│` tick on the bar at `compactWarnAt` |
+| `showPace` | `true` | Warn when you're on track to hit a plan limit before it resets |
 | `separator` | `" │ "` | Separator between sections |
 
 The `NO_COLOR` environment variable is honoured.
