@@ -3,7 +3,7 @@
 A coloured **context-window progress bar** for the [Claude Code](https://claude.com/claude-code) status line, plus your **plan usage %** (5-hour and 7-day limits) right next to it.
 
 ```
-Opus │ ctx ██████████░░░░░│░░░░ 50% 100k/200k │ usage 5h 40% (resets in 2h13m) · 7d 25%
+Opus │ ctx ██████████░░░░░│░░░░ 50% 100k/200k │ usage 5h 40% (resets in 2h13m) · 7d 25% │ git main*
 Opus │ ctx █████████████████▌░░ 88% 176k/200k ⚠ /compact soon │ usage 5h 70% (resets in 2h13m) ⚠ limit in ~1h10m · 7d 44%
 ```
 
@@ -90,6 +90,9 @@ Edit `~/.claude/context-bar.json`. Changes apply on the next refresh.
 | `compactWarnAt` | `80` | Context % at which `⚠ /compact soon` appears (`0` disables it) |
 | `showCompactMarker` | `true` | Draw a `│` tick on the bar at `compactWarnAt` |
 | `showPace` | `true` | Warn when you're on track to hit a plan limit before it resets |
+| `showGit` | `true` | Git branch: `git main* ↑1 ↓2`. `*` means uncommitted changes, `↑`/`↓` mean commits ahead/behind upstream. Hidden outside a repo |
+| `showDir` | `false` | Current folder name |
+| `showLines` | `false` | Lines added/removed this session: `+120 -45` |
 | `separator` | `" │ "` | Separator between sections |
 
 The `NO_COLOR` environment variable is honoured.
@@ -100,6 +103,10 @@ Claude Code runs the [status line command](https://code.claude.com/docs/en/statu
 
 - `context_window.used_percentage` / `context_window_size`, falling back to computing the value from `current_usage` when it's missing
 - `rate_limits.five_hour` / `seven_day` / `spend_limit`, which are only present for claude.ai subscribers, and only after the first response of a session
+
+- `workspace.current_dir` and `cost.total_lines_added` / `total_lines_removed` for the optional sections
+
+Claude Code doesn't send the git branch, so for that the script runs a single `git status --porcelain=v2 --branch` command. It has a 1-second timeout and takes no repository locks.
 
 Then it prints one coloured line.
 

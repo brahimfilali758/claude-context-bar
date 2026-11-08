@@ -30,6 +30,9 @@ const DEFAULTS = {
   compactWarnAt: 80,    // show "⚠ /compact soon" from this context % (0 = off)
   showCompactMarker: true, // tick mark on the bar at compactWarnAt
   showPace: true,       // warn when, at the current pace, you'll hit a plan limit before it resets
+  showGit: true,        // "git main* ↑1" — branch, * = uncommitted changes, ↑/↓ = ahead/behind upstream
+  showDir: false,       // current folder name
+  showLines: false,     // "+120 -45" lines added/removed this session
   separator: ' │ ',
 };
 
@@ -230,12 +233,64 @@ function render(data, cfg) {
     if (windows.length) parts.push(dim('usage ', mode) + windows.join(dim(' · ', mode)));
   }
 
+  const dir = (data.workspace && data.workspace.current_dir) || data.cwd || '';
+
+  if (cfg.showDir || cfg.showGit) {
+    let s = '';
+    if (cfg.showDir && dir) s += paint(path.basename(dir.replace(/[\\/]+$/, '')) || dir, [147, 197, 253], mode);
+    const git = cfg.showGit && dir ? getGit(dir) : null;
+    if (git) {
+      if (s) s += ' ';
+      s += dim('git ', mode) + paint(git.branch, [192, 132, 252], mode);
+      if (git.dirty) s += paint('*', YELLOW, mode);
+      if (git.ahead) s += dim(` ↑${git.ahead}`, mode);
+      if (git.behind) s += dim(` ↓${git.behind}`, mode);
+    }
+    if (s) parts.push(s);
+  }
+
+  if (cfg.showLines && data.cost) {
+    const add = num(data.cost.total_lines_added) || 0;
+    const del = num(data.cost.total_lines_removed) || 0;
+    if (add || del) parts.push(paint(`+${add}`, GREEN, mode) + ' ' + paint(`-${del}`, RED, mode));
+  }
+
   if (cfg.showCost && data.cost && num(data.cost.total_cost_usd) != null) {
     parts.push(dim('$' + data.cost.total_cost_usd.toFixed(2), mode));
   }
 
   return parts.join(sep);
 }
+
+/**
+ * Branch, dirty flag and ahead/behind from a single `git status` call.
+ * Returns null outside a repo, when git is missing, or if it takes too long.
+ */
+function gitInfo(dir) {
+  let out;
+  try {
+    out = require('child_process').execFileSync(
+      'git', ['--no-optional-locks', 'status', '--porcelain=v2', '--branch'],
+      { cwd: dir, encoding: 'utf8', timeout: 1000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch (_) {
+    return null;
+  }
+  const info = { branch: '', dirty: false, ahead: 0, behind: 0 };
+  let oid = '';
+  for (const line of out.split('\n')) {
+    if (line.startsWith('# branch.head ')) info.branch = line.slice(14).trim();
+    else if (line.startsWith('# branch.oid ')) oid = line.slice(13).trim();
+    else if (line.startsWith('# branch.ab ')) {
+      const m = line.match(/\+(\d+) -(\d+)/);
+      if (m) { info.ahead = +m[1]; info.behind = +m[2]; }
+    } else if (line && !line.startsWith('#')) info.dirty = true;
+  }
+  if (info.branch === '(detached)') info.branch = oid && oid !== '(initial)' ? oid.slice(0, 7) : 'detached';
+  return info.branch ? info : null;
+}
+
+let getGit = gitInfo; // swappable for tests
+const setGitProvider = (fn) => { getGit = fn || gitInfo; };
 
 // ------------------------------------------------------------------ main ---
 
@@ -256,4 +311,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { render, renderBar, heat, contextInfo, fmtTokens, fmtDuration, secondsUntilLimit, DEFAULTS };
+module.exports = { render, renderBar, heat, contextInfo, fmtTokens, fmtDuration, secondsUntilLimit, gitInfo, setGitProvider, DEFAULTS };

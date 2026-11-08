@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { render, heat, contextInfo, fmtTokens, fmtDuration, secondsUntilLimit, DEFAULTS } = require('../statusline.js');
+const { render, heat, contextInfo, fmtTokens, fmtDuration, secondsUntilLimit, gitInfo, setGitProvider, DEFAULTS } = require('../statusline.js');
 
 const plain = { ...DEFAULTS, color: 'none' };
 const SCRIPT = path.join(__dirname, '..', 'statusline.js');
@@ -94,4 +94,41 @@ test('pace warning is rendered', () => {
   assert.match(out, /⚠ limit in ~3[67]m/);
   const off = render({ context_window: { used_percentage: 10 }, rate_limits: { five_hour: { used_percentage: 80, resets_at: now + 9000 } } }, { ...plain, showPace: false });
   assert.doesNotMatch(off, /limit in/);
+});
+
+test('git section: branch, dirty marker, ahead/behind', () => {
+  setGitProvider(() => ({ branch: 'main', dirty: true, ahead: 2, behind: 1 }));
+  try {
+    const data = { workspace: { current_dir: '/home/me/my-app' }, context_window: { used_percentage: 5 } };
+    assert.match(render(data, plain), /git main\* ↑2 ↓1/);
+    assert.match(render(data, { ...plain, showDir: true }), /my-app git main\*/);
+    assert.doesNotMatch(render(data, { ...plain, showGit: false }), /git/);
+  } finally {
+    setGitProvider(null);
+  }
+});
+
+test('gitInfo reads a real repo and returns null outside one', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccb-'));
+  try {
+    assert.strictEqual(gitInfo(dir), null);
+    const git = (...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: dir });
+    git('init', '-q', '-b', 'feature-x');
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'hi');
+    git('add', '.'); git('commit', '-q', '-m', 'init');
+    assert.deepStrictEqual(gitInfo(dir), { branch: 'feature-x', dirty: false, ahead: 0, behind: 0 });
+    fs.writeFileSync(path.join(dir, 'b.txt'), 'new');
+    assert.strictEqual(gitInfo(dir).dirty, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('lines added/removed', () => {
+  const data = { context_window: { used_percentage: 5 }, cost: { total_lines_added: 120, total_lines_removed: 45 } };
+  assert.doesNotMatch(render(data, plain), /\+120/);
+  assert.match(render(data, { ...plain, showLines: true }), /\+120 -45/);
+  assert.doesNotMatch(render({ ...data, cost: {} }, { ...plain, showLines: true }), /\+0/);
 });
